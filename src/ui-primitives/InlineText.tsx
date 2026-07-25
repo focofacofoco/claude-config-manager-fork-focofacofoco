@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { cn } from './util'
+import { useFieldA11y } from './Field'
 
 interface Props {
   value: string
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export function InlineText({ value, onChange, placeholder, className, multiline, monospace }: Props) {
+  const field = useFieldA11y()
   const [local, setLocal] = useState(value ?? '')
   const ref = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null)
 
@@ -33,6 +35,9 @@ export function InlineText({ value, onChange, placeholder, className, multiline,
   if (multiline) {
     return (
       <textarea
+        id={field?.controlId}
+        aria-label={field?.label}
+        aria-describedby={field?.descriptionId}
         ref={ref as any}
         className={cls}
         value={local}
@@ -45,6 +50,9 @@ export function InlineText({ value, onChange, placeholder, className, multiline,
   }
   return (
     <input
+      id={field?.controlId}
+      aria-label={field?.label}
+      aria-describedby={field?.descriptionId}
       ref={ref as any}
       className={cls}
       value={local}

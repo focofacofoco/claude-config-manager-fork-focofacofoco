@@ -1,7 +1,7 @@
 import { cn } from './util'
 
 /**
- * Semantic colors aligned with the ccm design system:
+ * Semantic colors aligned with the Foco Config Manager design system:
  *   green  → activation / enabled / success
  *   grey   → inactive / disabled
  *   orange → emphasis / dirty / attention

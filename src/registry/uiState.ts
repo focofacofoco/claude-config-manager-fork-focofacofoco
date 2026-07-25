@@ -8,7 +8,7 @@ export interface UiState {
 }
 
 const uiStatePath = (home: string): string =>
-  join(home, '.config', 'ccm', 'ui-state.json')
+  join(home, '.config', 'foco-config-manager', 'ui-state.json')
 
 export const loadUiState = async (home: string): Promise<UiState> => {
   const loaded = await readJsonOrNull<UiState>(uiStatePath(home))

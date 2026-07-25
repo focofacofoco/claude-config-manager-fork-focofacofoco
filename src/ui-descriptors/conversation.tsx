@@ -30,7 +30,9 @@ const useToolResult = (toolId: string): string | null => {
         const v = map.get(toolId)
         if (v !== undefined) setResult(v)
       })
-      .catch(() => {})
+      .catch((error) => {
+        console.error(`Failed to load tool results for ${filePath}`, error)
+      })
     return () => { cancelled = true }
   }, [filePath, toolId])
 
@@ -306,6 +308,9 @@ function ToolDetailModal({ tool, onClose }: { tool: ToolUse; onClose: () => void
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-6" onClick={onClose}>
       <div
         className="w-full max-w-6xl max-h-[85vh] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${tool.name} details`}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 px-4 py-3 border-b border-zinc-800 shrink-0">
@@ -730,6 +735,7 @@ const findScrollParent = (el: HTMLElement | null): HTMLElement | null => {
 
 function ConversationViewer({ value }: { value: Conversation; onChange: any; ctx: any }) {
   const [messages, setMessages] = useState<ParsedMessage[] | null>(null)
+  const [parseError, setParseError] = useState<string | null>(null)
   const [selectedTool, setSelectedTool] = useState<ToolUse | null>(null)
   const [scrollParent, setScrollParent] = useState<HTMLElement | null>(null)
   const anchorRef = useRef<HTMLDivElement | null>(null)
@@ -737,9 +743,15 @@ function ConversationViewer({ value }: { value: Conversation; onChange: any; ctx
   useEffect(() => {
     let cancelled = false
     setMessages(null)
+    setParseError(null)
     parseConversationMessages(value.filePath)
       .then((m) => { if (!cancelled) setMessages(m) })
-      .catch(() => { if (!cancelled) setMessages([]) })
+      .catch((error) => {
+        if (!cancelled) {
+          setMessages([])
+          setParseError(error instanceof Error ? error.message : String(error))
+        }
+      })
     return () => { cancelled = true }
   }, [value.filePath])
 
@@ -764,6 +776,13 @@ function ConversationViewer({ value }: { value: Conversation; onChange: any; ctx
 
   if (messages === null) {
     return <div ref={anchorRef}><LoadingSkeleton /></div>
+  }
+  if (parseError) {
+    return (
+      <div ref={anchorRef} role="alert" className="p-6 text-red-400 text-sm">
+        Could not parse conversation: {parseError}
+      </div>
+    )
   }
   if (messages.length === 0) {
     return <div ref={anchorRef} className="p-6 text-zinc-500 text-sm">No messages found.</div>

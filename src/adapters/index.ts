@@ -25,7 +25,6 @@ export * from './paths'
 export * from './selfWrites'
 export * from './frontmatter'
 export * from './conversationAdapter'
-export * from './tokenCounter'
 
 export const readAll = async (loc: Location, home: string): Promise<AnyEntity[]> => {
   const results = await Promise.all([

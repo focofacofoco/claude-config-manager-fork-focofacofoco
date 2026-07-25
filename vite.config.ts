@@ -13,7 +13,7 @@ const adapterSwap = (): Plugin => {
     'dialog.ts': 'dialog.demo.ts',
   }
   return {
-    name: 'ccm:demo-adapter-swap',
+    name: 'foco:demo-adapter-swap',
     enforce: 'pre',
     async resolveId(id, importer, opts) {
       if (!importer) return null

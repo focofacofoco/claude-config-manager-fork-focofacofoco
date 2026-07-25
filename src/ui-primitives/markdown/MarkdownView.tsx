@@ -4,6 +4,7 @@ import { parse as parseFrontmatter } from '@/adapters/frontmatter'
 import { remarkAlerts } from './alerts'
 import { CodeBlock } from './CodeBlock'
 import { FrontmatterPanel } from './FrontmatterPanel'
+import { ExternalLink } from '../ExternalLink'
 
 interface Props {
   value: string
@@ -14,6 +15,20 @@ interface Props {
 const PLUGINS = [remarkGfm, remarkAlerts]
 
 const COMPONENTS: Components = {
+  a: ({ href, children }) => {
+    if (!href) return <>{children}</>
+    return <ExternalLink target={href}>{children}</ExternalLink>
+  },
+  img: ({ src, alt }) => {
+    if (typeof src === 'string' && /^https?:\/\//i.test(src)) {
+      return (
+        <span className="remote-media-blocked">
+          Remote image blocked: {alt || src}
+        </span>
+      )
+    }
+    return <img src={src} alt={alt ?? ''} loading="lazy" />
+  },
   pre: ({ children }) => <>{children}</>,
   code({ className, children, ...rest }) {
     const match = /language-(\w+)/.exec(className ?? '')

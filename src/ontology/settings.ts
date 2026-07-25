@@ -1,13 +1,8 @@
 import { z } from 'zod'
 
 export const Settings = z.object({
-  anthropic: z
-    .object({
-      apiKey: z.string().default(''),
-    })
-    .default({ apiKey: '' }),
   markdownDefaultMode: z.enum(['edit', 'read']).default('edit'),
-  checkUpdatesOnStartup: z.boolean().default(true),
+  theme: z.enum(['system', 'light', 'dark']).default('system'),
   /** Plugin ids (`<name>@<marketplace>`) the user has flagged for an upcoming update. */
   markedPlugins: z.array(z.string()).default([]),
 })

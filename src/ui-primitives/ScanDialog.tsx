@@ -83,6 +83,9 @@ export function ScanDialogHost({ onAdd }: Props) {
     >
       <div
         className="w-[640px] max-w-[90vw] max-h-[80vh] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl overflow-hidden flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Discovered projects"
         onClick={(e) => e.stopPropagation()}
       >
         <header className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">

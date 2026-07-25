@@ -20,6 +20,9 @@ export const MarketplaceSourceObject = z.union([
     ref: z.string().optional(),
   }),
   z.object({ source: z.literal('path'), path: z.string() }),
+  z.object({ repo: z.string(), ref: z.string().optional(), sha: z.string().optional() }),
+  z.object({ url: z.string(), ref: z.string().optional(), sha: z.string().optional() }),
+  z.object({ path: z.string() }),
   z.object({ source: z.string() }).passthrough(),
 ])
 export type MarketplaceSourceObject = z.infer<typeof MarketplaceSourceObject>

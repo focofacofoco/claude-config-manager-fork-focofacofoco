@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    ccm_lib::run()
+    foco_config_manager_lib::run()
 }

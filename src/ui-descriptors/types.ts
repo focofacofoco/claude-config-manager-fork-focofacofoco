@@ -11,7 +11,7 @@ export interface ActionContext {
   scope: Scope
   projects: Project[]
   home: string
-  createIn: (kind: Kind, value: any, scope: Scope) => Promise<void>
+  createIn: (kind: Kind, value: any, scope: Scope) => Promise<boolean>
   remove: (entity: Entity<any>) => Promise<void>
 }
 

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
 import { create } from 'zustand'
 import type { Settings } from '@/ontology'
 import { Field } from './Field'
-import { Switch } from './Switch'
 import { cn } from './util'
 import { version as appVersion } from '../../package.json'
 
@@ -25,31 +25,22 @@ export const openSettingsDialog = () => useSettingsDialog.getState().show()
 interface Props {
   settings: Settings
   onChange: (next: Settings) => void
-  onCheckForUpdates?: () => void
 }
 
-export function SettingsDialog({ settings, onChange, onCheckForUpdates }: Props) {
+export function SettingsDialog({ settings, onChange }: Props) {
   const { open, close } = useSettingsDialog()
   if (!open) return null
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[10vh]"
-      onClick={close}
-    >
-      <div
-        className="w-[640px] max-w-[90vw] max-h-[80vh] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl overflow-hidden flex flex-col"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog.Root open onOpenChange={(next) => !next && close()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content className="settings-dialog" aria-describedby={undefined}>
         <header className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
-          <div className="text-sm">Settings</div>
-          <button
-            onClick={close}
-            className="text-zinc-500 hover:text-zinc-100 text-lg leading-none px-1"
-            aria-label="Close"
-          >
+          <Dialog.Title className="text-sm">Settings</Dialog.Title>
+          <Dialog.Close className="icon-button compact" aria-label="Close settings">
             ×
-          </button>
+          </Dialog.Close>
         </header>
         <div className="flex-1 overflow-auto px-5 py-4 space-y-8">
           <Section title="Editor" description="Defaults for the markdown editor.">
@@ -64,61 +55,25 @@ export function SettingsDialog({ settings, onChange, onCheckForUpdates }: Props)
               />
             </Field>
           </Section>
-          <Section title="Updates" description="Checks the GitHub release feed, no telemetry.">
-            <Field
-              orientation="row"
-              label="Check for updates on startup"
-            >
-              <Switch
-                value={settings.checkUpdatesOnStartup}
-                onChange={(v) => onChange({ ...settings, checkUpdatesOnStartup: v })}
-              />
-            </Field>
-            {onCheckForUpdates && (
-              <Field
-                orientation="row"
-                label="Check now"
-                hint="Checks the release feed immediately."
-              >
-                <button
-                  type="button"
-                  onClick={onCheckForUpdates}
-                  className="text-xs px-3 py-1.5 rounded border border-zinc-700 bg-zinc-800 hover:bg-zinc-700 hover:border-zinc-600 text-zinc-100 transition-colors"
-                >
-                  Check
-                </button>
-              </Field>
-            )}
-          </Section>
-          {/* Hidden until agentic features actually use the key. Kept in the
-              Settings schema so existing config.json files round-trip cleanly.
-          <Section title="AI" description="Credentials for upcoming agentic features. Stored locally at ~/.config/ccm/config.json.">
-            <Field
-              label="Anthropic API Key"
-              hint="Reserved for future use. Not currently sent anywhere."
-            >
-              <SecretInput
-                value={settings.anthropic.apiKey}
-                onChange={(v) =>
-                  onChange({
-                    ...settings,
-                    anthropic: { ...settings.anthropic, apiKey: v },
-                  })
-                }
-                placeholder="sk-ant-…"
+          <Section title="Appearance" description="Choose a theme or follow the operating system.">
+            <Field orientation="row" label="Theme">
+              <ThemeToggle
+                value={settings.theme}
+                onChange={(theme) => onChange({ ...settings, theme })}
               />
             </Field>
           </Section>
-          */}
           <Section title="About">
             <div className="text-xs text-zinc-500 space-y-1 font-mono">
-              <div>ccm — Claude Code Manager</div>
+              <div>Foco Config Manager</div>
               <div>v{appVersion}</div>
+              <div>Local-first. Explicit plugin operations may use the network.</div>
             </div>
           </Section>
         </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }
 
@@ -172,44 +127,26 @@ function ModeToggle({
   )
 }
 
-// Paired with the commented-out AI section above. Uncomment both together.
-// function SecretInput({
-//   value,
-//   onChange,
-//   placeholder,
-// }: {
-//   value: string
-//   onChange: (v: string) => void
-//   placeholder?: string
-// }) {
-//   const [show, setShow] = useState(false)
-//   const [local, setLocal] = useState(value)
-//
-//   const commit = () => {
-//     if (local !== value) onChange(local)
-//   }
-//
-//   return (
-//     <div className="flex gap-2 items-center">
-//       <input
-//         type={show ? 'text' : 'password'}
-//         value={local}
-//         placeholder={placeholder}
-//         onChange={(e) => setLocal(e.target.value)}
-//         onBlur={commit}
-//         className={cn(
-//           'flex-1 bg-zinc-900/40 hover:bg-zinc-900/80 focus:bg-zinc-900 rounded px-2 py-1',
-//           'border border-dashed border-zinc-800 hover:border-zinc-700 focus:border-orange-400 focus:border-solid',
-//           'outline-none transition-colors font-mono text-[13px] text-zinc-100 placeholder:text-zinc-600',
-//         )}
-//       />
-//       <button
-//         type="button"
-//         onClick={() => setShow((s) => !s)}
-//         className="text-xs text-zinc-500 hover:text-zinc-100 px-2 py-1"
-//       >
-//         {show ? 'hide' : 'show'}
-//       </button>
-//     </div>
-//   )
-// }
+function ThemeToggle({
+  value,
+  onChange,
+}: {
+  value: Settings['theme']
+  onChange: (theme: Settings['theme']) => void
+}) {
+  return (
+    <div className="segmented-control" aria-label="Theme">
+      {(['system', 'light', 'dark'] as const).map((theme) => (
+        <button
+          key={theme}
+          type="button"
+          aria-pressed={value === theme}
+          onClick={() => onChange(theme)}
+          className={cn(value === theme && 'is-active')}
+        >
+          {theme}
+        </button>
+      ))}
+    </div>
+  )
+}

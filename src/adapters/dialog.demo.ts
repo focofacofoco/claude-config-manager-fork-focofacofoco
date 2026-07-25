@@ -7,7 +7,7 @@
 export const pickDirectory = async (): Promise<string | null> => {
   if (typeof window !== 'undefined') {
     window.alert(
-      'Folder picker is disabled in the demo. Install CCM on your machine to add your own projects.',
+      'Folder picker is disabled in the demo. Install Foco Config Manager on your machine to add your own projects.',
     )
   }
   return null

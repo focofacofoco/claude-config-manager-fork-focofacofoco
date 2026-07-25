@@ -3,7 +3,8 @@ import { fs, join, readJsonOrNull } from '@/adapters'
 /**
  * Generic per-path cache, keyed by `(mtime, size)`, persisted to disk.
  *
- * Each namespace backs a single JSON file under `~/.config/ccm/` and holds
+ * Each namespace backs a single JSON file under
+ * `~/.config/foco-config-manager/` and holds
  * an opaque value type chosen by the caller. Hits happen iff the stamp
  * matches; mismatches (a file was edited since last parse) return null.
  *
@@ -57,7 +58,7 @@ const namespaces: Namespace[] = []
 let home = ''
 
 const fileOf = (ns: Namespace, h: string): string =>
-  join(h, '.config', 'ccm', `${ns.name}.cache.json`)
+  join(h, '.config', 'foco-config-manager', `${ns.name}.cache.json`)
 
 const scheduleFlush = (ns: Namespace): void => {
   if (!home) return

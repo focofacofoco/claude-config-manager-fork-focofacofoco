@@ -15,6 +15,12 @@ interface Props {
   children?: ReactNode
 }
 
+const OPEN_PALETTE_EVENT = 'foco:open-command-palette'
+
+export const openCommandPalette = (): void => {
+  window.dispatchEvent(new Event(OPEN_PALETTE_EVENT))
+}
+
 export function CommandPalette({ actions }: Props) {
   const [open, setOpen] = useState(false)
 
@@ -27,7 +33,12 @@ export function CommandPalette({ actions }: Props) {
       if (e.key === 'Escape') setOpen(false)
     }
     document.addEventListener('keydown', h)
-    return () => document.removeEventListener('keydown', h)
+    const openPalette = () => setOpen(true)
+    window.addEventListener(OPEN_PALETTE_EVENT, openPalette)
+    return () => {
+      document.removeEventListener('keydown', h)
+      window.removeEventListener(OPEN_PALETTE_EVENT, openPalette)
+    }
   }, [])
 
   if (!open) return null
@@ -41,11 +52,14 @@ export function CommandPalette({ actions }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[15vh]"
+      className="dialog-overlay flex items-start justify-center pt-[15vh]"
       onClick={() => setOpen(false)}
     >
       <div
-        className="w-[640px] max-w-[90vw] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command palette"
+        className="w-[640px] max-w-[90vw] bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         <Command shouldFilter>

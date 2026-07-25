@@ -126,6 +126,7 @@ interface MenuProps {
 }
 
 function Menu({ items, x, y, onHoverItem, onSelect }: MenuProps) {
+  const menuRef = useRef<HTMLDivElement | null>(null)
   const groups = new Map<string, ContextMenuItem[]>()
   for (const it of items) {
     const g = it.group ?? ''
@@ -140,10 +141,40 @@ function Menu({ items, x, y, onHoverItem, onSelect }: MenuProps) {
   const left = Math.min(Math.max(0, x), vw - MENU_W - 8)
   const top = Math.min(Math.max(0, y), vh - MENU_H_EST - 8)
 
+  useEffect(() => {
+    menuRef.current
+      ?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+      ?.focus()
+  }, [])
+
   return (
     <div
+      ref={menuRef}
+      role="menu"
+      aria-label="Item actions"
       className="fixed z-[60] min-w-[200px] bg-zinc-900 border border-zinc-700 rounded shadow-2xl py-1"
       style={{ left, top }}
+      onKeyDown={(event) => {
+        const options = [
+          ...(menuRef.current?.querySelectorAll<HTMLButtonElement>(
+            'button:not(:disabled)',
+          ) ?? []),
+        ]
+        const index = options.indexOf(document.activeElement as HTMLButtonElement)
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+          event.preventDefault()
+          const delta = event.key === 'ArrowDown' ? 1 : -1
+          options[(index + delta + options.length) % options.length]?.focus()
+        }
+        if (event.key === 'Home') {
+          event.preventDefault()
+          options[0]?.focus()
+        }
+        if (event.key === 'End') {
+          event.preventDefault()
+          options.at(-1)?.focus()
+        }
+      }}
     >
       {[...groups.entries()].map(([group, its], gi) => (
         <div key={group || `__${gi}`}>
@@ -156,6 +187,8 @@ function Menu({ items, x, y, onHoverItem, onSelect }: MenuProps) {
           {its.map((it, i) => (
             <button
               key={`${group}-${i}`}
+              role="menuitem"
+              tabIndex={-1}
               disabled={it.disabled}
               onMouseEnter={(e) => onHoverItem(it, e.currentTarget.getBoundingClientRect())}
               onClick={() => {

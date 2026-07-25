@@ -9,13 +9,13 @@ interface Props {
 
 export function Inspector({ title, subtitle, actions, children }: Props) {
   return (
-    <div className="flex flex-col h-full">
+    <div className="inspector">
       {(title || actions) && (
         // The header is its own container so we can switch between row and
         // column layout based on the *inspector* width (not the viewport).
         // At narrow widths we stack actions below the title/subtitle rather
         // than squeezing the title until it truncates.
-        <header className="@container px-5 py-3 border-b border-zinc-800 shrink-0">
+        <header className="inspector-header @container">
           <div className="flex flex-col items-start gap-2 @[560px]:flex-row @[560px]:items-center @[560px]:justify-between">
             <div className="min-w-0 max-w-full">
               {title && <div className="text-sm font-medium truncate">{title}</div>}
@@ -29,7 +29,7 @@ export function Inspector({ title, subtitle, actions, children }: Props) {
           </div>
         </header>
       )}
-      <div className="flex-1 overflow-auto px-5 py-4 space-y-5">{children}</div>
+      <div className="inspector-body">{children}</div>
     </div>
   )
 }

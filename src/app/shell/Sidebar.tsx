@@ -1,10 +1,31 @@
-import { allKindsForScope, type Kind } from '@/ontology'
-import { kindSpecs } from '@/ontology'
+import {
+  Bot,
+  Brain,
+  Command,
+  FileText,
+  MessagesSquare,
+  Plus,
+  Plug,
+  ScanSearch,
+  Server,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  Store,
+  Webhook,
+} from 'lucide-react'
+import { allKindsForScope, kindSpecs, type Kind } from '@/ontology'
 import { useStore } from '@/app/store'
 import { cn, openScanDialog, openSettingsDialog, prompt } from '@/ui-primitives'
 import { pickDirectory } from '@/adapters/dialog'
 import { fs } from '@/adapters'
 import { toast } from 'sonner'
+
+const KIND_GROUPS: Array<{ label: string; kinds: Kind[] }> = [
+  { label: 'Context', kinds: ['claudemd', 'memory', 'conversation'] },
+  { label: 'Automations', kinds: ['agent', 'command', 'skill', 'rule', 'hook'] },
+  { label: 'Integrations', kinds: ['mcp', 'plugin', 'marketplace'] },
+]
 
 export function Sidebar() {
   const scope = useStore((s) => s.scope)
@@ -15,6 +36,7 @@ export function Sidebar() {
   const setKind = useStore((s) => s.setKind)
   const addProject = useStore((s) => s.addProject)
   const removeProject = useStore((s) => s.removeProject)
+  const supportedKinds = allKindsForScope(scope)
 
   const handleAdd = async () => {
     const path = await pickDirectory()
@@ -29,92 +51,89 @@ export function Sidebar() {
   const handleScan = async () => {
     const root = await pickDirectory()
     if (!root) return
-    await openScanDialog(root, (r) => fs.scanForProjects(r))
+    await openScanDialog(root, (candidate) => fs.scanForProjects(candidate))
     toast.message('Scanning…', { description: root })
   }
 
   return (
-    <aside className="w-[260px] shrink-0 border-r border-zinc-800 flex flex-col bg-zinc-950">
-      <div className="flex-1 overflow-auto">
-        <div className="px-4 py-2 flex items-center justify-between">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">Scopes</div>
-          <div className="flex items-center gap-1">
+    <aside className="sidebar" aria-label="Workspace navigation">
+      <div className="sidebar-scroll">
+        <div className="sidebar-section-heading">
+          <span>Workspaces</span>
+          <span className="sidebar-heading-actions">
             <button
+              type="button"
               onClick={handleScan}
-              className="text-zinc-500 hover:text-zinc-100 p-0.5"
+              className="icon-button compact"
               title="Scan a folder for projects"
+              aria-label="Scan a folder for projects"
             >
-              <ScanIcon />
+              <ScanSearch size={14} />
             </button>
             <button
+              type="button"
               onClick={handleAdd}
-              className="text-zinc-500 hover:text-zinc-100 px-1 text-base leading-none"
+              className="icon-button compact"
               title="Add a project"
+              aria-label="Add a project"
             >
-              +
+              <Plus size={15} />
             </button>
-          </div>
+          </span>
         </div>
-        <div>
+        <nav aria-label="Workspaces">
           <ScopeItem
-            name="global"
+            name="Global"
             path={home ? `${home.replace(/\\/g, '/')}/.claude` : undefined}
             active={scope.type === 'user'}
             onSelect={() => setScope({ type: 'user' })}
           />
-          {projects.map((p) => (
+          {projects.map((project) => (
             <ScopeItem
-              key={p.id}
-              name={p.name}
-              path={p.path}
-              muted={!p.exists}
-              active={scope.type === 'project' && scope.projectId === p.id}
-              onSelect={() => setScope({ type: 'project', projectId: p.id })}
-              onRemove={() => removeProject(p)}
+              key={project.id}
+              name={project.name}
+              path={project.path}
+              muted={!project.exists}
+              active={scope.type === 'project' && scope.projectId === project.id}
+              onSelect={() => setScope({ type: 'project', projectId: project.id })}
+              onRemove={() => removeProject(project)}
             />
           ))}
-          {projects.length === 0 && (
-            <div className="px-4 py-2 text-xs text-zinc-600">No projects.</div>
-          )}
-        </div>
-      </div>
-      <div className="border-t border-zinc-800 py-2">
-        <div className="px-4 py-1 flex items-center justify-between">
-          <div className="text-[11px] uppercase tracking-wide text-zinc-500">
-            Configuration
-          </div>
-          <button
-            onClick={openSettingsDialog}
-            className="text-zinc-500 hover:text-zinc-100 p-0.5"
-            title="Settings"
-            aria-label="Settings"
-          >
-            <GearIcon />
-          </button>
-        </div>
-        {allKindsForScope(scope).map((k) => (
-          <KindButton key={k} kind={k} active={kind === k} onClick={() => setKind(k)} />
-        ))}
-      </div>
-    </aside>
-  )
-}
+          {projects.length === 0 && <div className="sidebar-empty">No projects yet.</div>}
+        </nav>
 
-function GearIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
-    </svg>
+        <nav className="kind-navigation" aria-label="Configuration">
+          {KIND_GROUPS.map((group) => {
+            const kinds = group.kinds.filter((candidate) =>
+              supportedKinds.includes(candidate),
+            )
+            if (kinds.length === 0) return null
+            return (
+              <div key={group.label} className="kind-group">
+                <div className="sidebar-section-heading">{group.label}</div>
+                {kinds.map((candidate) => (
+                  <KindButton
+                    key={candidate}
+                    kind={candidate}
+                    active={kind === candidate}
+                    onClick={() => setKind(candidate)}
+                  />
+                ))}
+              </div>
+            )
+          })}
+        </nav>
+      </div>
+
+      <button type="button" className="sidebar-settings" onClick={openSettingsDialog}>
+        <Settings2 size={15} />
+        <span>Settings</span>
+        <span className="sidebar-local">
+          <ShieldCheck size={12} />
+          local
+        </span>
+      </button>
+    </aside>
   )
 }
 
@@ -134,51 +153,33 @@ function ScopeItem({
   onRemove?: () => void
 }) {
   return (
-    <div
-      className={cn(
-        'group flex items-center gap-1 pr-2 border-l-2',
-        active ? 'bg-zinc-900 border-orange-400' : 'border-transparent hover:bg-zinc-900',
-      )}
-    >
-      <button onClick={onSelect} className="flex-1 min-w-0 px-3 py-1.5 text-left">
-        <div className={cn('text-sm truncate', muted && 'line-through text-zinc-500')}>
+    <div className={cn('scope-item group', active && 'is-active')}>
+      <button
+        type="button"
+        onClick={onSelect}
+        className="scope-button"
+        aria-current={active ? 'page' : undefined}
+      >
+        <span className={cn('scope-name', muted && 'line-through text-zinc-500')}>
           {name}
-        </div>
-        {path && (
-          <div className="text-[10px] text-zinc-500 font-mono truncate">{path}</div>
-        )}
+        </span>
+        {path && <span className="scope-path">{path}</span>}
       </button>
       {onRemove && (
         <button
-          onClick={(e) => {
-            e.stopPropagation()
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
             onRemove()
           }}
-          className="opacity-0 group-hover:opacity-100 text-zinc-600 hover:text-red-400 text-xs px-1"
+          className="scope-remove"
           title="Remove from list"
+          aria-label={`Remove ${name} from list`}
         >
           ×
         </button>
       )}
     </div>
-  )
-}
-
-function ScanIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </svg>
   )
 }
 
@@ -195,35 +196,43 @@ function KindButton({
   const loading = useStore((s) => s.loadingKinds.has(kind))
   return (
     <button
+      type="button"
       onClick={onClick}
-      className={cn(
-        'w-full text-left px-4 py-1.5 text-sm flex items-center justify-between border-l-2',
-        active
-          ? 'bg-zinc-900 border-orange-400 text-zinc-100'
-          : 'border-transparent text-zinc-300 hover:bg-zinc-900',
-      )}
+      aria-current={active ? 'page' : undefined}
+      className={cn('kind-button', active && 'is-active')}
     >
-      <span>{kindSpecs[kind].pluralLabel}</span>
-      {loading ? <Spinner /> : <span className="text-xs text-zinc-500">{count}</span>}
+      <span className="kind-label">
+        <KindIcon kind={kind} />
+        {kindSpecs[kind].pluralLabel}
+      </span>
+      {loading ? <Spinner /> : <span className="kind-count">{count}</span>}
     </button>
   )
 }
 
-function Spinner() {
-  return (
-    <svg
-      className="animate-spin text-zinc-500"
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="3"
-      aria-label="loading"
-    >
-      <circle cx="12" cy="12" r="9" opacity="0.25" />
-      <path d="M21 12a9 9 0 0 0-9-9" strokeLinecap="round" />
-    </svg>
-  )
+function KindIcon({ kind }: { kind: Kind }) {
+  const props = { size: 14, 'aria-hidden': true as const }
+  switch (kind) {
+    case 'claudemd': return <FileText {...props} />
+    case 'memory': return <Brain {...props} />
+    case 'agent': return <Bot {...props} />
+    case 'command': return <Command {...props} />
+    case 'skill': return <Sparkles {...props} />
+    case 'rule': return <ShieldCheck {...props} />
+    case 'hook': return <Webhook {...props} />
+    case 'mcp': return <Server {...props} />
+    case 'plugin': return <Plug {...props} />
+    case 'marketplace': return <Store {...props} />
+    case 'conversation': return <MessagesSquare {...props} />
+  }
 }
 
+function Spinner() {
+  return (
+    <span
+      className="spinner"
+      role="status"
+      aria-label="Loading"
+    />
+  )
+}

@@ -1,4 +1,5 @@
-import { useEffect, useRef } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
+import { useId, useRef } from 'react'
 import { create } from 'zustand'
 
 interface ConfirmRequest {
@@ -40,11 +41,9 @@ export const confirm = (opts: {
 export function ConfirmHost() {
   const current = useConfirmStore((s) => s.current)
   const close = useConfirmStore((s) => s.close)
-  const confirmBtnRef = useRef<HTMLButtonElement | null>(null)
-
-  useEffect(() => {
-    if (current) setTimeout(() => confirmBtnRef.current?.focus(), 0)
-  }, [current])
+  const cancelBtnRef = useRef<HTMLButtonElement | null>(null)
+  const titleId = useId()
+  const descriptionId = useId()
 
   if (!current) return null
 
@@ -53,42 +52,44 @@ export function ConfirmHost() {
     : 'bg-orange-500 text-zinc-950 hover:bg-orange-400'
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[20vh]"
-      onClick={() => close(false)}
-    >
-      <div
-        className="w-[460px] max-w-[90vw] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') close(true)
-          if (e.key === 'Escape') close(false)
-        }}
-      >
-        <div className="px-4 py-3 border-b border-zinc-800 text-sm">
-          {current.title}
-        </div>
-        {current.body && (
-          <div className="px-4 py-3 text-sm text-zinc-400 whitespace-pre-wrap break-words">
-            {current.body}
+    <Dialog.Root open onOpenChange={(open) => !open && close(false)}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content
+          role="alertdialog"
+          aria-labelledby={titleId}
+          aria-describedby={current.body ? descriptionId : undefined}
+          className="dialog-content"
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            cancelBtnRef.current?.focus()
+          }}
+        >
+          <Dialog.Title id={titleId} className="dialog-title">
+            {current.title}
+          </Dialog.Title>
+          {current.body && (
+            <Dialog.Description id={descriptionId} className="dialog-description">
+              {current.body}
+            </Dialog.Description>
+          )}
+          <div className="dialog-actions">
+            <button
+              ref={cancelBtnRef}
+              onClick={() => close(false)}
+              className="button button-secondary"
+            >
+              {current.cancelLabel ?? 'Cancel'}
+            </button>
+            <button
+              onClick={() => close(true)}
+              className={`button ${accent}`}
+            >
+              {current.confirmLabel ?? 'OK'}
+            </button>
           </div>
-        )}
-        <div className="px-4 py-3 border-t border-zinc-800 flex justify-end gap-2">
-          <button
-            onClick={() => close(false)}
-            className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100"
-          >
-            {current.cancelLabel ?? 'Cancel'}
-          </button>
-          <button
-            ref={confirmBtnRef}
-            onClick={() => close(true)}
-            className={`px-3 py-1.5 text-sm rounded ${accent}`}
-          >
-            {current.confirmLabel ?? 'OK'}
-          </button>
-        </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

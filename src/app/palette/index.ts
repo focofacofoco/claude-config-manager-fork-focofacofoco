@@ -1,11 +1,11 @@
-import { allKinds, kindSpecs, type Entity } from '@/ontology'
+import { allKinds, kindSpecs, kindSupportsScope, type Entity } from '@/ontology'
 import { descriptorFor } from '@/ui-descriptors'
-import { openScanDialog, openSettingsDialog, prompt, type PaletteAction } from '@/ui-primitives'
+import { confirm, openScanDialog, openSettingsDialog, prompt, type PaletteAction } from '@/ui-primitives'
 import { useStore } from '@/app/store'
 import { pickDirectory } from '@/adapters/dialog'
 import { fs } from '@/adapters'
 import { toast } from 'sonner'
-import { checkForUpdates, setUpdateScenario } from '@/app/updater'
+import { canCreateKind, canDeleteEntity, canMoveEntity } from '@/app/policy'
 
 export const buildPaletteActions = (): PaletteAction[] => {
   const state = useStore.getState()
@@ -45,6 +45,7 @@ export const buildPaletteActions = (): PaletteAction[] => {
   }
 
   for (const k of allKinds) {
+    if (!kindSupportsScope(k, scope)) continue
     actions.push({
       id: `kind:${k}`,
       group: 'Jump to',
@@ -54,8 +55,7 @@ export const buildPaletteActions = (): PaletteAction[] => {
   }
 
   for (const k of allKinds) {
-    if (kindSpecs[k].readOnly) continue
-    if (kindSpecs[k].noCreate) continue
+    if (!canCreateKind(k, scope)) continue
     const d = descriptorFor(k)
     actions.push({
       id: `new:${k}`,
@@ -64,8 +64,9 @@ export const buildPaletteActions = (): PaletteAction[] => {
       onSelect: async () => {
         const input = await prompt(d.newLabel, { placeholder: d.newPromptLabel })
         if (!input) return
-        await createNew(k, input, d.newDefault(input))
-        toast.success(`Created ${k}: ${input}`)
+        if (await createNew(k, input, d.newDefault(input))) {
+          toast.success(`Created ${k}: ${input}`)
+        }
       },
     })
   }
@@ -73,16 +74,26 @@ export const buildPaletteActions = (): PaletteAction[] => {
   const current = selectedId
     ? ((entities as any)[kind] as Entity<any>[]).find((e) => e.id === selectedId)
     : null
-  if (current && !kindSpecs[kind].readOnly) {
+  if (current && canDeleteEntity(current)) {
     actions.push({
       id: 'current:delete',
       group: 'Current',
       label: 'Delete current',
       onSelect: async () => {
-        await deleteExisting(current)
-        toast.success('Deleted')
+        const approved = await confirm({
+          title: 'Delete current item?',
+          body: 'This removes the underlying local configuration.',
+          confirmLabel: 'Delete',
+          danger: true,
+        })
+        if (approved) {
+          await deleteExisting(current)
+          toast.success('Deleted')
+        }
       },
     })
+  }
+  if (current && canMoveEntity(current)) {
     if (scope.type !== 'user') {
       actions.push({
         id: 'current:copy-to-user',
@@ -155,45 +166,5 @@ export const buildPaletteActions = (): PaletteAction[] => {
     label: 'Settings…',
     onSelect: () => openSettingsDialog(),
   })
-  actions.push({
-    id: 'updates:check',
-    group: 'View',
-    label: 'Check for updates…',
-    onSelect: () => {
-      setUpdateScenario('real')
-      checkForUpdates()
-    },
-  })
-
-  if (import.meta.env.DEV) {
-    actions.push({
-      id: 'dev:mock-update-available',
-      group: 'Dev',
-      label: 'Mock: update available',
-      onSelect: () => {
-        setUpdateScenario('available')
-        checkForUpdates()
-      },
-    })
-    actions.push({
-      id: 'dev:mock-update-none',
-      group: 'Dev',
-      label: 'Mock: no update',
-      onSelect: () => {
-        setUpdateScenario('none')
-        checkForUpdates()
-      },
-    })
-    actions.push({
-      id: 'dev:mock-update-error',
-      group: 'Dev',
-      label: 'Mock: update check error',
-      onSelect: () => {
-        setUpdateScenario('error')
-        checkForUpdates()
-      },
-    })
-  }
-
   return actions
 }

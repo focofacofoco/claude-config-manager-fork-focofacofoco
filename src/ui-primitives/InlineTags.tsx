@@ -1,5 +1,6 @@
 import { useState, type KeyboardEvent } from 'react'
 import { cn } from './util'
+import { useFieldA11y } from './Field'
 
 interface Props {
   value: string[] | undefined
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function InlineTags({ value, onChange, placeholder, suggestions, className }: Props) {
+  const field = useFieldA11y()
   const [draft, setDraft] = useState('')
   const tags = value ?? []
 
@@ -58,6 +60,9 @@ export function InlineTags({ value, onChange, placeholder, suggestions, classNam
           </span>
         ))}
         <input
+          id={field?.controlId}
+          aria-label={field?.label}
+          aria-describedby={field?.descriptionId}
           type="text"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

@@ -14,6 +14,14 @@ const stampOf = (e: DirEntry): FileStamp => ({ mtime: e.mtime, size: e.size })
 
 const sessionIdOf = (fileName: string): string => fileName.slice(0, -6)
 
+const parseJsonLine = (line: string, index: number, filePath: string): any => {
+  try {
+    return JSON.parse(line)
+  } catch {
+    throw new Error(`Malformed conversation JSON in ${filePath} at line ${index + 1}`)
+  }
+}
+
 const extractMetadata = async (
   filePath: string,
   sessionId: string,
@@ -26,20 +34,18 @@ const extractMetadata = async (
     let lastTime = ''
     let turnCount = 0
     let tokenCount = 0
-    for (const line of lines) {
-      try {
-        const obj = JSON.parse(line)
-        if (obj.timestamp) {
-          if (!startTime || obj.timestamp < startTime) startTime = obj.timestamp
-          if (!lastTime || obj.timestamp > lastTime) lastTime = obj.timestamp
-        }
-        if (obj.type === 'ai-title' && obj.aiTitle) title = obj.aiTitle
-        if (obj.type === 'user' && !obj.isSidechain && obj.message?.role === 'user') turnCount++
-        if (obj.type === 'assistant' && !obj.isSidechain && obj.message?.usage) {
-          const u = obj.message.usage
-          tokenCount += (u.input_tokens ?? 0) + (u.output_tokens ?? 0)
-        }
-      } catch {}
+    for (const [index, line] of lines.entries()) {
+      const obj = parseJsonLine(line, index, filePath)
+      if (obj.timestamp) {
+        if (!startTime || obj.timestamp < startTime) startTime = obj.timestamp
+        if (!lastTime || obj.timestamp > lastTime) lastTime = obj.timestamp
+      }
+      if (obj.type === 'ai-title' && obj.aiTitle) title = obj.aiTitle
+      if (obj.type === 'user' && !obj.isSidechain && obj.message?.role === 'user') turnCount++
+      if (obj.type === 'assistant' && !obj.isSidechain && obj.message?.usage) {
+        const u = obj.message.usage
+        tokenCount += (u.input_tokens ?? 0) + (u.output_tokens ?? 0)
+      }
     }
     return { title, startTime, lastTime, turnCount, tokenCount }
   } catch {
@@ -257,9 +263,8 @@ const parseMessagesUncached = async (filePath: string): Promise<ParsedMessage[]>
   const lines = raw.split('\n').filter(Boolean)
 
   const messages: ParsedMessage[] = []
-  for (const line of lines) {
-    try {
-      const obj = JSON.parse(line)
+  for (const [index, line] of lines.entries()) {
+      const obj = parseJsonLine(line, index, filePath)
       if (obj.type === 'user' && !obj.isSidechain && obj.message?.role === 'user') {
         const content: any[] = Array.isArray(obj.message?.content) ? obj.message.content : []
         const textBlocks = content
@@ -281,7 +286,6 @@ const parseMessagesUncached = async (filePath: string): Promise<ParsedMessage[]>
         if (textBlocks.length > 0 || toolUses.length > 0)
           messages.push({ uuid: obj.uuid, role: 'assistant', timestamp: obj.timestamp, textBlocks, toolUses })
       }
-    } catch {}
   }
 
   return messages
@@ -316,16 +320,17 @@ export const parseConversationMessages = (filePath: string): Promise<ParsedMessa
  * cached by the time the user actually opens it. Called on list-item hover.
  */
 export const prefetchConversation = (filePath: string): void => {
-  void parseConversationMessages(filePath).catch(() => {})
+  void parseConversationMessages(filePath).catch((error) => {
+    console.error(`Failed to prefetch conversation ${filePath}`, error)
+  })
 }
 
 const loadToolResultsUncached = async (filePath: string): Promise<Map<string, string>> => {
   const raw = await fs.readText(filePath)
   const lines = raw.split('\n').filter(Boolean)
   const results = new Map<string, string>()
-  for (const line of lines) {
-    try {
-      const obj = JSON.parse(line)
+  for (const [index, line] of lines.entries()) {
+      const obj = parseJsonLine(line, index, filePath)
       if (obj.type === 'user' && obj.message?.role === 'user') {
         const content: any[] = Array.isArray(obj.message?.content) ? obj.message.content : []
         for (const c of content) {
@@ -333,7 +338,6 @@ const loadToolResultsUncached = async (filePath: string): Promise<Map<string, st
             results.set(c.tool_use_id, extractResultText(c))
         }
       }
-    } catch {}
   }
   return results
 }

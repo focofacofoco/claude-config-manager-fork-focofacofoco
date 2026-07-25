@@ -94,14 +94,36 @@ pub async fn ensure_dir(path: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn remove_path(path: String) -> Result<(), String> {
     let p = PathBuf::from(&path);
-    if !p.exists() {
-        return Ok(());
-    }
-    if p.is_dir() {
-        tokio::fs::remove_dir_all(&p).await.map_err(to_err)
+    let metadata = match tokio::fs::symlink_metadata(&p).await {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(to_err(error)),
+    };
+    if metadata.is_dir() {
+        guarded_remove_dir_all(&p).await
     } else {
         tokio::fs::remove_file(&p).await.map_err(to_err)
     }
+}
+
+async fn guarded_remove_dir_all(path: &Path) -> Result<(), String> {
+    let canonical = tokio::fs::canonicalize(path).await.map_err(to_err)?;
+    let parent = canonical.parent().ok_or_else(|| {
+        format!(
+            "refusing to remove filesystem root: {}",
+            canonical.display()
+        )
+    })?;
+    if parent.parent().is_none() {
+        return Err(format!(
+            "refusing to remove top-level directory: {}",
+            canonical.display()
+        ));
+    }
+    if dirs::home_dir().is_some_and(|home| canonical == home) {
+        return Err("refusing to remove the home directory".to_string());
+    }
+    tokio::fs::remove_dir_all(path).await.map_err(to_err)
 }
 
 #[tauri::command]
@@ -200,7 +222,7 @@ const IGNORED_DIRS: &[&str] = &[
 ];
 
 fn is_ignored_dir(name: &str) -> bool {
-    IGNORED_DIRS.iter().any(|d| *d == name)
+    IGNORED_DIRS.contains(&name)
 }
 
 /// Parallel, gitignore-aware walk that collects every file whose name matches
@@ -306,8 +328,7 @@ pub async fn scan_for_projects(
         return Err(format!("path does not exist: {root}"));
     }
     let depth = max_depth.unwrap_or(8);
-    let hits: Arc<Mutex<HashMap<PathBuf, (bool, bool)>>> =
-        Arc::new(Mutex::new(HashMap::new()));
+    let hits: Arc<Mutex<HashMap<PathBuf, (bool, bool)>>> = Arc::new(Mutex::new(HashMap::new()));
 
     let walker = WalkBuilder::new(&root_path)
         .max_depth(Some(depth))
@@ -493,6 +514,7 @@ pub async fn run_claude_cli(
         c
     };
 
+    command.kill_on_drop(true);
     let child = command
         .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::piped())

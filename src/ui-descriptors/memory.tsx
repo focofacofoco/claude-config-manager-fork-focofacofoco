@@ -40,8 +40,8 @@ export const memoryDescriptor: UiDescriptor<Memory> = {
           description: m.description,
           body: m.body,
         })
-        await ctx.createIn('rule', rule, ctx.scope)
-        await ctx.remove(entity)
+        const created = await ctx.createIn('rule', rule, ctx.scope)
+        if (created) await ctx.remove(entity)
       },
     },
   ],

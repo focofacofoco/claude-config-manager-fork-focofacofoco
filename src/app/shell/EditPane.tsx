@@ -1,19 +1,19 @@
-import { useMemo, useEffect, useState, useRef } from 'react'
+import { useMemo, useState } from 'react'
+import { ArrowLeft, PanelRightOpen } from 'lucide-react'
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
 import { useStore } from '@/app/store'
 import { descriptorFor } from '@/ui-descriptors'
-import { Inspector, cn, FilePath, type ContextMenuItem } from '@/ui-primitives'
+import { Inspector, cn, confirm, FilePath, type ContextMenuItem } from '@/ui-primitives'
 import type { AnyEntity, Entity, Scope } from '@/ontology'
-import { kindSpecs } from '@/ontology'
 import { referencesFrom, referrersOf, kindParticipatesInRefs, type Reference } from '@/engine'
-import { countTokens, displayEntityPath } from '@/adapters'
-
-const fmtTokens = (n: number): string =>
-  n >= 1_000_000 ? `~${(n / 1_000_000).toFixed(1)}m` : n >= 1_000 ? `~${(n / 1_000).toFixed(1)}k` : `~${n}`
+import { displayEntityPath } from '@/adapters'
 import { copyMoveTargets, type ScopeTarget } from './targets'
+import { canDeleteEntity, canMoveEntity } from '@/app/policy'
 
 export function EditPane() {
   const kind = useStore((s) => s.kind)
   const selectedId = useStore((s) => s.selectedId)
+  const setSelected = useStore((s) => s.setSelected)
   const entities = useStore((s) => s.entities)
   const refs = useStore((s) => s.refs)
   const projects = useStore((s) => s.projects)
@@ -27,42 +27,27 @@ export function EditPane() {
   // Subscribe to pendingOps so descriptor.customActions re-renders when an op
   // starts/finishes — keeps header buttons reactive (spinner, disabled state).
   useStore((s) => s.pendingOps)
-  const apiKey = useStore((s) => s.settings.anthropic.apiKey)
-  const [tokenCount, setTokenCount] = useState<number | null>(null)
-  const tokenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
+  const [refsOpen, setRefsOpen] = useState(false)
   const entity = useMemo<Entity<any> | null>(() => {
     if (!selectedId) return null
     const list = (entities as any)[kind] as Entity<any>[]
     return list.find((e) => e.id === selectedId) ?? null
   }, [entities, kind, selectedId])
 
-  useEffect(() => {
-    setTokenCount(null)
-    if (!entity || !entity.raw || entity.kind === 'conversation') return
-    if (tokenTimerRef.current) clearTimeout(tokenTimerRef.current)
-    tokenTimerRef.current = setTimeout(() => {
-      countTokens(entity.raw, apiKey).then(setTokenCount)
-    }, 500)
-    return () => {
-      if (tokenTimerRef.current) clearTimeout(tokenTimerRef.current)
-    }
-  }, [entity?.id, apiKey])
-
   if (!entity) {
     return (
-      <div className="flex-1 flex items-center justify-center text-zinc-600 text-sm">
-        Select something on the left, or press <Kbd>⌘K</Kbd> for actions.
+      <div className="edit-empty">
+        <div className="empty-focus-mark" />
+        <strong>Ready when you are</strong>
+        <span>Select an item or press <Kbd>Ctrl K</Kbd> for actions.</span>
       </div>
     )
   }
 
   const descriptor = descriptorFor(entity.kind)
   const Editor = descriptor.Editor
-  const spec = kindSpecs[entity.kind]
-  const readOnly = spec.readOnly ?? false
-  const canScopeMove = !readOnly || (spec.allowScopeMove ?? false)
-  const canDelete = !readOnly && (descriptor.canDelete ? descriptor.canDelete(entity.value) : true)
+  const canScopeMove = canMoveEntity(entity)
+  const canDelete = canDeleteEntity(entity)
 
   const incoming = referrersOf(entity.id, refs)
   const outgoing = referencesFrom(entity.id, refs)
@@ -77,8 +62,12 @@ export function EditPane() {
     []
 
   return (
-    <div className="flex-1 flex min-w-0">
-      <div className="flex-1 min-w-0">
+    <div className="edit-pane">
+      <div className="editor-main">
+        <button type="button" className="compact-back" onClick={() => setSelected(null)}>
+          <ArrowLeft size={14} />
+          Back to list
+        </button>
         <Inspector
           title={
             <span>
@@ -96,14 +85,22 @@ export function EditPane() {
                   {displayEntityPath(entity, home, projects)}
                 </FilePath>
               )}
-              {tokenCount !== null && (
-                <span className="shrink-0 text-zinc-500">{fmtTokens(tokenCount)} tokens</span>
-              )}
             </span>
           }
           actions={
-            headerActions.length > 0 || canScopeMove || canDelete ? (
+            headerActions.length > 0 || canScopeMove || canDelete || showRefs ? (
               <>
+                {showRefs && (
+                  <button
+                    type="button"
+                    className={cn('header-action', refsOpen && 'is-active')}
+                    onClick={() => setRefsOpen((open) => !open)}
+                    aria-pressed={refsOpen}
+                  >
+                    <PanelRightOpen size={14} />
+                    References {incoming.length + outgoing.length}
+                  </button>
+                )}
                 {headerActions.map((a, i) => (
                   <HeaderActionButton key={i} item={a} />
                 ))}
@@ -123,8 +120,14 @@ export function EditPane() {
                 )}
                 {canDelete && (
                   <button
-                    onClick={() => {
-                      if (confirm('Delete this item?')) deleteExisting(entity)
+                    onClick={async () => {
+                      const approved = await confirm({
+                        title: 'Delete this item?',
+                        body: 'This removes the underlying local configuration.',
+                        confirmLabel: 'Delete',
+                        danger: true,
+                      })
+                      if (approved) await deleteExisting(entity)
                     }}
                     className="text-xs text-zinc-500 hover:text-red-400 px-2 py-1"
                   >
@@ -154,8 +157,8 @@ export function EditPane() {
           />
         </Inspector>
       </div>
-      {showRefs && (
-        <aside className="w-[240px] shrink-0 border-l border-zinc-800 overflow-auto bg-zinc-950">
+      {showRefs && refsOpen && (
+        <aside className="references-drawer" aria-label="Relationships">
           {incoming.length > 0 && (
             <div className="px-4 py-3 border-b border-zinc-800">
               <div className="text-[11px] uppercase tracking-wide text-zinc-500">Referenced by</div>
@@ -236,22 +239,24 @@ function ScopeActionMenu({
 }) {
   if (targets.length === 0) return null
   return (
-    <div className="relative group">
-      <button className="text-xs text-zinc-400 hover:text-zinc-100 px-2 py-1">
-        {label}
-      </button>
-      <div className="absolute right-0 top-full hidden group-hover:block z-40 min-w-[200px] bg-zinc-900 border border-zinc-700 rounded shadow-xl py-1">
-        {targets.map((t, i) => (
-          <button
-            key={i}
-            onClick={() => onSelect(t.scope)}
-            className="block w-full text-left px-3 py-1.5 text-sm hover:bg-zinc-800"
-          >
-            {t.name}
-          </button>
-        ))}
-      </div>
-    </div>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button type="button" className="header-action">{label}</button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content className="dropdown-content" align="end" sideOffset={6}>
+          {targets.map((target) => (
+            <DropdownMenu.Item
+              key={target.name}
+              className="dropdown-item"
+              onSelect={() => onSelect(target.scope)}
+            >
+              {target.name}
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   )
 }
 

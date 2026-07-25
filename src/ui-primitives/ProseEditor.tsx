@@ -6,6 +6,18 @@ import { EditorView } from '@codemirror/view'
 import { useStore } from '@/app/store'
 import { MarkdownView } from './markdown/MarkdownView'
 import { cn } from './util'
+import { useFieldA11y } from './Field'
+
+const lightEditorTheme = EditorView.theme(
+  {
+    '&': { color: '#151821', backgroundColor: '#ffffff' },
+    '.cm-content': { caretColor: '#4f46e5' },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#4f46e5' },
+    '.cm-selectionBackground, ::selection': { backgroundColor: '#e2e0ff' },
+    '.cm-activeLine': { backgroundColor: 'transparent' },
+  },
+  { dark: false },
+)
 
 interface Props {
   value: string
@@ -14,7 +26,12 @@ interface Props {
 }
 
 export function ProseEditor({ value, onChange, minHeight = '200px' }: Props) {
+  const field = useFieldA11y()
   const defaultMode = useStore((s) => s.settings.markdownDefaultMode)
+  const theme = useStore((s) => s.settings.theme)
+  const dark =
+    theme === 'dark' ||
+    (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
   const [read, setRead] = useState(defaultMode === 'read')
   useEffect(() => {
     setRead(defaultMode === 'read')
@@ -40,10 +57,22 @@ export function ProseEditor({ value, onChange, minHeight = '200px' }: Props) {
         </div>
       ) : (
         <CodeMirror
+          id={field?.controlId}
+          aria-label={field?.label}
+          aria-describedby={field?.descriptionId}
           value={safe}
           onChange={onChange}
-          theme={oneDark}
-          extensions={[markdown(), EditorView.lineWrapping]}
+          theme={dark ? oneDark : lightEditorTheme}
+          extensions={[
+            markdown(),
+            EditorView.lineWrapping,
+            EditorView.contentAttributes.of({
+              'aria-label': field?.label ?? 'Markdown content',
+              ...(field?.descriptionId
+                ? { 'aria-describedby': field.descriptionId }
+                : {}),
+            }),
+          ]}
           basicSetup={{
             lineNumbers: false,
             foldGutter: false,

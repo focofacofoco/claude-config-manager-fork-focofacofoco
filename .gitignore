@@ -9,6 +9,9 @@ dist-demo
 dist-ssr
 *.local
 .vite
+.playwright-cli/
+test-results/
+playwright-report/
 
 # TypeScript incremental / composite emits
 *.tsbuildinfo
@@ -16,6 +19,7 @@ dist-ssr
 /vite.config.d.ts
 
 # Tauri / Rust
+/target/
 src-tauri/target
 src-tauri/gen
 

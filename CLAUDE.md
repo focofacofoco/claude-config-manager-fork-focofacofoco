@@ -1,4 +1,4 @@
-# CCM — Claude Code Manager
+# Foco Config Manager
 
 A Tauri desktop app for managing Claude Code configuration files across all your projects.
 
@@ -61,8 +61,8 @@ Read-only kinds (e.g. `conversation`): set `readOnly: true` on `KindSpec`. The s
 | Project configs | `{project}/.claude/` — same structure |
 | Memories | `~/.claude/projects/{encoded}/memory/*.md` |
 | Conversations | `~/.claude/projects/{encoded}/*.jsonl` |
-| App settings | `~/.config/ccm/config.json` |
-| UI state | `~/.config/ccm/ui-state.json` |
+| App settings | `~/.config/foco-config-manager/config.json` |
+| UI state | `~/.config/foco-config-manager/ui-state.json` |
 
 ## Tech Stack
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
 import { create } from 'zustand'
 
 interface PromptRequest {
@@ -38,24 +39,27 @@ export function PromptHost() {
 
   useEffect(() => {
     setValue(current?.initialValue ?? '')
-    if (current) setTimeout(() => inputRef.current?.focus(), 0)
   }, [current])
 
   if (!current) return null
 
   return (
-    <div
-      className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-start justify-center pt-[20vh]"
-      onClick={() => close(null)}
-    >
-      <div
-        className="w-[420px] max-w-[90vw] bg-zinc-900 border border-zinc-700 rounded-lg shadow-2xl overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="px-4 py-3 border-b border-zinc-800 text-sm">{current.title}</div>
+    <Dialog.Root open onOpenChange={(open) => !open && close(null)}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="dialog-overlay" />
+        <Dialog.Content
+          className="dialog-content"
+          aria-describedby={undefined}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            inputRef.current?.focus()
+          }}
+        >
+        <Dialog.Title className="dialog-title">{current.title}</Dialog.Title>
         <div className="p-4">
           <input
             ref={inputRef}
+            aria-label={current.title}
             value={value}
             onChange={(e) => setValue(e.target.value)}
             onKeyDown={(e) => {
@@ -69,18 +73,19 @@ export function PromptHost() {
         <div className="px-4 py-3 border-t border-zinc-800 flex justify-end gap-2">
           <button
             onClick={() => close(null)}
-            className="px-3 py-1.5 text-sm text-zinc-400 hover:text-zinc-100"
+            className="button button-secondary"
           >
             Cancel
           </button>
           <button
             onClick={() => close(value)}
-            className="px-3 py-1.5 text-sm bg-orange-500 text-zinc-950 rounded hover:bg-orange-400"
+            className="button button-primary"
           >
             OK
           </button>
         </div>
-      </div>
-    </div>
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   )
 }

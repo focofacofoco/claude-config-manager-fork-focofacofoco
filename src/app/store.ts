@@ -24,7 +24,6 @@ import {
   scopeFromKey,
   loadSettings,
   saveSettings,
-  initTokenCache,
   initPersistentCaches,
   invalidateConversation,
   invalidateToolResults,
@@ -46,6 +45,7 @@ import {
 } from '@/ontology'
 import { buildReferenceGraph, entityExistsAt, type Reference } from '@/engine'
 import { confirm } from '@/ui-primitives'
+import { WriteScheduler } from './writeScheduler'
 
 interface EntitiesByKind {
   claudemd: Entity<any>[]
@@ -113,11 +113,11 @@ interface Actions {
   setSearch: (s: string) => void
   reload: () => Promise<void>
   updateEntity: (entity: Entity<any>, next: any) => void
-  createNew: (kind: Kind, input: string, value: any) => Promise<void>
+  createNew: (kind: Kind, input: string, value: any) => Promise<boolean>
   deleteExisting: (entity: Entity<any>) => Promise<void>
   copyToScope: (entity: Entity<any>, target: Scope) => Promise<void>
   moveToScope: (entity: Entity<any>, target: Scope) => Promise<void>
-  createIn: (kind: Kind, value: any, target: Scope) => Promise<void>
+  createIn: (kind: Kind, value: any, target: Scope) => Promise<boolean>
   addProject: (path: string, name?: string) => Promise<void>
   removeProject: (project: Project) => Promise<void>
   updateSettings: (next: Settings) => void
@@ -135,6 +135,8 @@ interface Actions {
    * makes sense if we don't lie with an optimistic flip.
    */
   saveEntity: (entity: Entity<any>, next: any) => Promise<void>
+  flushWrites: () => Promise<void>
+  dispose: () => void
 }
 
 type Store = State & Actions
@@ -143,6 +145,9 @@ const USER_SCOPE: Scope = { type: 'user' }
 
 const selectionKey = (scope: Scope, kind: Kind): string =>
   `${scopeKey(scope)}::${kind}`
+
+const writeKey = (scope: Scope, entity: Entity<any>): string =>
+  `${scopeKey(scope)}::${entity.kind}::${entity.id}`
 
 const resolveContext = (s: State): { loc: Location; home: string } | null => {
   const loc = resolveLocation(s.scope, s.home, s.projects)
@@ -182,7 +187,7 @@ const resolveSelection = (
   return list[0]?.id ?? null
 }
 
-const writeTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const writeScheduler = new WriteScheduler(350)
 let reloadTimer: ReturnType<typeof setTimeout> | null = null
 let saveUiTimer: ReturnType<typeof setTimeout> | null = null
 let saveSettingsTimer: ReturnType<typeof setTimeout> | null = null
@@ -239,8 +244,8 @@ const runEnrichment = async (
         const enriched = await enrichConversation(jobs[i]!)
         if (!enriched || !isCurrent()) continue
         onEnriched(enriched)
-      } catch {
-        // best-effort: a single enrichment failure shouldn't block others
+      } catch (error) {
+        console.error(`Failed to enrich conversation ${jobs[i]?.path ?? ''}`, error)
       }
     }
   }
@@ -372,7 +377,6 @@ export const useStore = create<Store>((set, get) => ({
       set({ home })
       await Promise.all([
         get().refreshProjects(),
-        initTokenCache(home),
         initPersistentCaches(home),
       ])
       const ui = await loadUiState(home)
@@ -407,7 +411,10 @@ export const useStore = create<Store>((set, get) => ({
       })
       set({ ready: true })
     } catch (e) {
-      set({ lastError: e instanceof Error ? e.message : String(e) })
+      set({
+        lastError: e instanceof Error ? e.message : String(e),
+        ready: true,
+      })
     }
   },
 
@@ -418,6 +425,7 @@ export const useStore = create<Store>((set, get) => ({
 
   setScope: (scope) => {
     if (scopeEq(scope, get().scope)) return
+    writeScheduler.dispose()
     set((s) => {
       const kind = kindSupportsScope(s.kind, scope)
         ? s.kind
@@ -480,7 +488,8 @@ export const useStore = create<Store>((set, get) => ({
     const reloadScope = state.scope
     const stillCurrent = () => scopeEq(get().scope, reloadScope)
 
-    set({ loadingKinds: new Set<Kind>(allKinds) })
+    set({ loadingKinds: new Set<Kind>(allKinds), lastError: null })
+    const reloadErrors: string[] = []
 
     const commitKind = (k: Kind, list: Entity<any>[]) => {
       set((s) => {
@@ -500,14 +509,11 @@ export const useStore = create<Store>((set, get) => ({
     }
 
     const clearLoading = (k: Kind, err?: unknown) => {
+      if (err !== undefined) {
+        reloadErrors.push(err instanceof Error ? err.message : String(err))
+      }
       set((s) => ({
         loadingKinds: withoutKind(s.loadingKinds, k),
-        lastError:
-          err === undefined
-            ? s.lastError
-            : err instanceof Error
-              ? err.message
-              : String(err),
       }))
     }
 
@@ -535,7 +541,10 @@ export const useStore = create<Store>((set, get) => ({
     if (!stillCurrent()) return
 
     const all = Object.values(get().entities).flat() as AnyEntity[]
-    set({ refs: buildReferenceGraph(all), lastError: null })
+    set({
+      refs: buildReferenceGraph(all),
+      lastError: reloadErrors.length > 0 ? reloadErrors.join('\n') : null,
+    })
 
     if (enrichJobs.length > 0) {
       void runEnrichment(enrichJobs, stillCurrent, (entity) => {
@@ -553,6 +562,12 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   updateEntity: (entity, next) => {
+    const scheduledScope = get().scope
+    const ctx = resolveContext(get())
+    if (!ctx) {
+      set({ lastError: 'No location for scope' })
+      return
+    }
     set((s) => {
       const list = (s.entities as any)[entity.kind] as Entity<any>[]
       const updated = list.map((e) =>
@@ -560,55 +575,44 @@ export const useStore = create<Store>((set, get) => ({
       )
       return { entities: { ...s.entities, [entity.kind]: updated } }
     })
-    const key = entity.id
-    const prev = writeTimers.get(key)
-    if (prev) clearTimeout(prev)
-    writeTimers.set(
-      key,
-      setTimeout(async () => {
-        const ctx = resolveContext(get())
-        if (!ctx) return
-        try {
-          const current = (get().entities as any)[entity.kind].find(
-            (e: Entity<any>) => e.id === entity.id,
-          ) as Entity<any> | undefined
-          const value = current?.value ?? next
-          const writeCtx: WriteContext = { loc: ctx.loc, home: ctx.home }
-          await adapterWrite(writeCtx, entity, value)
-          // Clear `dirty` only if no further edit landed while we were writing.
-          // If `current.value` is still what we just wrote, the user has stopped
-          // typing and the on-disk state matches memory — the orange dot can go
-          // away. If it changed, a later debounce will own the clear.
-          set((s) => {
-            const list = (s.entities as any)[entity.kind] as Entity<any>[]
-            const idx = list.findIndex((e) => e.id === entity.id)
-            if (idx < 0) return {}
-            const item = list[idx]!
-            if (!item.dirty || item.value !== value) return {}
-            const cleaned = list.slice()
-            cleaned[idx] = { ...item, dirty: false, origin: value }
-            return { entities: { ...s.entities, [entity.kind]: cleaned } }
-          })
-        } catch (e) {
-          set({ lastError: e instanceof Error ? e.message : String(e) })
-        }
-      }, 350),
-    )
+    const key = writeKey(scheduledScope, entity)
+    const writeCtx: WriteContext = { loc: ctx.loc, home: ctx.home }
+    writeScheduler.schedule(key, async () => {
+      try {
+        await adapterWrite(writeCtx, entity, next)
+        set((s) => {
+          if (!scopeEq(s.scope, scheduledScope)) return {}
+          const list = (s.entities as any)[entity.kind] as Entity<any>[]
+          const idx = list.findIndex((e) => e.id === entity.id)
+          if (idx < 0) return {}
+          const item = list[idx]!
+          if (!item.dirty || item.value !== next) return {}
+          const cleaned = list.slice()
+          cleaned[idx] = { ...item, dirty: false, origin: next }
+          return { entities: { ...s.entities, [entity.kind]: cleaned } }
+        })
+      } catch (e) {
+        set({ lastError: e instanceof Error ? e.message : String(e) })
+      }
+    })
   },
 
   createNew: async (kind, _input, value) => {
     const ctx = resolveContext(get())
-    if (!ctx) return
+    if (!ctx) return false
     try {
       await adapterCreate({ loc: ctx.loc, home: ctx.home }, kind, value)
       await refreshKinds(new Set([kind]))
       set({ kind })
+      return true
     } catch (e) {
       set({ lastError: e instanceof Error ? e.message : String(e) })
+      return false
     }
   },
 
   deleteExisting: async (entity) => {
+    writeScheduler.cancel(writeKey(get().scope, entity))
     const ctx = resolveContext(get())
     if (!ctx) return
     try {
@@ -651,9 +655,9 @@ export const useStore = create<Store>((set, get) => ({
   createIn: async (kind, value, target) => {
     const state = get()
     const targetLoc = resolveLocation(target, state.home, state.projects)
-    if (!targetLoc) return
+    if (!targetLoc) return false
     const ctx = { loc: targetLoc, home: state.home }
-    if (!(await confirmIfCollides(ctx, kind, value, 'create'))) return
+    if (!(await confirmIfCollides(ctx, kind, value, 'create'))) return false
     try {
       await adapterCreate(ctx, kind, value)
       // Only refresh if the target scope is the one currently on screen;
@@ -662,8 +666,10 @@ export const useStore = create<Store>((set, get) => ({
       if (scopeEq(target, state.scope)) {
         await refreshKinds(new Set([kind]))
       }
+      return true
     } catch (e) {
       set({ lastError: e instanceof Error ? e.message : String(e) })
+      return false
     }
   },
 
@@ -693,6 +699,19 @@ export const useStore = create<Store>((set, get) => ({
     const ctx = resolveContext(get())
     if (!ctx) throw new Error('No location for scope')
     await adapterWrite({ loc: ctx.loc, home: ctx.home }, entity, next)
+  },
+
+  flushWrites: () => writeScheduler.flush(),
+
+  dispose: () => {
+    writeScheduler.dispose()
+    if (reloadTimer) clearTimeout(reloadTimer)
+    if (saveUiTimer) clearTimeout(saveUiTimer)
+    if (saveSettingsTimer) clearTimeout(saveSettingsTimer)
+    pendingRefreshPaths.clear()
+    void fs.unwatchAll().catch((error) => {
+      console.error('Failed to stop filesystem watchers', error)
+    })
   },
 
   runOp: async (key, fn) => {

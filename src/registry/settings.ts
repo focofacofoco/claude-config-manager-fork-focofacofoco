@@ -1,7 +1,8 @@
 import { Settings, defaultSettings } from '@/ontology'
 import { fs, join, readJsonOrNull } from '@/adapters'
 
-const settingsPath = (home: string): string => join(home, '.config', 'ccm', 'config.json')
+const settingsPath = (home: string): string =>
+  join(home, '.config', 'foco-config-manager', 'config.json')
 
 export const loadSettings = async (home: string): Promise<Settings> => {
   const raw = await readJsonOrNull<unknown>(settingsPath(home))
